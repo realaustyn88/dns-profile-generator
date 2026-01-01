@@ -41,6 +41,7 @@ export function ProfileForm() {
       setServerUrl(dnsProtocol === "HTTPS" ? provider.dohUrl : provider.dotHostname);
       setServerIps(provider.ips?.join(", ") || "");
     } else {
+      setProfileName("");
       setServerUrl("");
       setServerIps("");
     }
