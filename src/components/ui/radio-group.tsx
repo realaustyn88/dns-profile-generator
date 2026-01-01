@@ -33,4 +33,39 @@ const RadioGroupItem = React.forwardRef<
 });
 RadioGroupItem.displayName = RadioGroupPrimitive.Item.displayName;
 
-export { RadioGroup, RadioGroupItem };
+// Card-style radio for visual selection
+const RadioGroupCard = React.forwardRef<
+  React.ElementRef<typeof RadioGroupPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Item> & {
+    label: string;
+    description?: string;
+  }
+>(({ className, label, description, ...props }, ref) => {
+  return (
+    <RadioGroupPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex cursor-pointer rounded-lg border-2 border-border bg-card p-4 transition-all hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=checked]:border-primary data-[state=checked]:bg-accent disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      <div className="flex w-full items-center gap-3">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-current">
+          <RadioGroupPrimitive.Indicator>
+            <Circle className="h-2.5 w-2.5 fill-primary text-primary" />
+          </RadioGroupPrimitive.Indicator>
+        </div>
+        <div className="flex-1 text-left">
+          <div className="text-sm font-medium leading-none">{label}</div>
+          {description && (
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          )}
+        </div>
+      </div>
+    </RadioGroupPrimitive.Item>
+  );
+});
+RadioGroupCard.displayName = "RadioGroupCard";
+
+export { RadioGroup, RadioGroupItem, RadioGroupCard };
