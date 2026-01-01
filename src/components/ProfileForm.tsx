@@ -95,7 +95,7 @@ export function ProfileForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!validateForm()) {
       toast.error("Please fix the form errors");
       return;
@@ -127,7 +127,7 @@ export function ProfileForm() {
     // Sign the profile if signing is enabled
     if (signingEnabled && signingCerts) {
       try {
-        const signed = signMobileConfig(xml, signingCerts);
+        const signed = await signMobileConfig(xml, signingCerts);
         setSignedProfile(signed);
         toast.success("Profile generated and signed successfully");
       } catch (error) {

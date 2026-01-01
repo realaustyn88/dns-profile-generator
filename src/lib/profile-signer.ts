@@ -1,114 +1,20 @@
-import forge from "node-forge";
+// Re-export from pkijs-based signer for signing functionality
+export { signMobileConfig, downloadSignedProfile } from "./profile-signer-pkijs";
+export type { SigningConfig } from "./profile-signer-pkijs";
 
-export interface SigningConfig {
-  signingCert: string; // PEM certificate
-  privateKey: string; // PEM private key
-  chainCerts: string[]; // Array of PEM certificates for the chain
-}
-
-/**
- * Signs a mobileconfig XML using S/MIME (PKCS#7)
- * Equivalent to: openssl smime -sign -signer cert -inkey key -certfile chain -nodetach -outform der
- */
-export function signMobileConfig(
-  xmlContent: string,
-  config: SigningConfig
-): Uint8Array {
-  try {
-    // Extract first certificate from potentially fullchain PEM
-    const firstCertMatch = config.signingCert.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/);
-    if (!firstCertMatch) {
-      throw new Error("No valid certificate found in signing certificate");
-    }
-    
-    // Parse the signing certificate
-    const signerCert = forge.pki.certificateFromPem(firstCertMatch[0]);
-
-    // Parse the private key
-    const privateKey = forge.pki.privateKeyFromPem(config.privateKey);
-
-    // Create PKCS#7 signed data
-    const p7 = forge.pkcs7.createSignedData();
-
-    // Set the content to sign (the mobileconfig XML)
-    p7.content = forge.util.createBuffer(xmlContent, "utf8");
-
-    // Add the signer's certificate
-    p7.addCertificate(signerCert);
-
-    // Add chain certificates
-    for (const chainCertPem of config.chainCerts) {
-      try {
-        const chainCert = forge.pki.certificateFromPem(chainCertPem);
-        p7.addCertificate(chainCert);
-      } catch (e) {
-        console.warn("Failed to parse chain certificate:", e);
-      }
-    }
-
-    // Add signer with authenticated attributes (similar to openssl smime defaults)
-    p7.addSigner({
-      key: privateKey,
-      certificate: signerCert,
-      digestAlgorithm: forge.pki.oids.sha256,
-      authenticatedAttributes: [
-        {
-          type: forge.pki.oids.contentType,
-          value: forge.pki.oids.data,
-        },
-        {
-          type: forge.pki.oids.messageDigest,
-          // value will be auto-populated at signing time
-        },
-        {
-          type: forge.pki.oids.signingTime,
-          value: new Date(),
-        },
-      ],
-    });
-
-    // Sign the data (attached/nodetach mode - content is included)
-    p7.sign();
-
-    // Convert to ASN.1 and then to DER
-    const asn1 = p7.toAsn1();
-    const derBytes = forge.asn1.toDer(asn1);
-
-    // Convert to Uint8Array
-    const buffer = new Uint8Array(derBytes.length());
-    for (let i = 0; i < derBytes.length(); i++) {
-      buffer[i] = derBytes.at(i);
-    }
-
-    return buffer;
-  } catch (error) {
-    console.error("Signing error:", error);
-    throw new Error(
-      `Failed to sign profile: ${error instanceof Error ? error.message : "Unknown error"}`
-    );
-  }
-}
+import * as pkijs from "pkijs";
+import { Convert } from "pvtsutils";
 
 /**
- * Downloads a signed profile
+ * Decode PEM to ArrayBuffer
  */
-export function downloadSignedProfile(
-  signedData: Uint8Array,
-  filename: string
-): void {
-  const blob = new Blob([new Uint8Array(signedData)], {
-    type: "application/x-apple-aspen-config",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename.endsWith(".mobileconfig")
-    ? filename
-    : `${filename}.mobileconfig`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function pemToArrayBuffer(pem: string): ArrayBuffer {
+  const b64 = pem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s/g, "");
+  
+  return Convert.FromBase64(b64);
 }
 
 /**
@@ -129,12 +35,9 @@ export type PemValidationResult =
       error: string;
     };
 
-function isForgeUnsupportedKeyType(err: unknown): boolean {
-  return err instanceof Error && /OID is not RSA/i.test(err.message);
-}
-
 /**
  * Validates a PEM certificate (supports fullchain - uses first cert)
+ * Now supports both RSA and ECDSA certificates via pkijs
  */
 export function validatePemCertificate(pem: string): PemValidationResult {
   try {
@@ -143,24 +46,18 @@ export function validatePemCertificate(pem: string): PemValidationResult {
       return { valid: false, code: "NO_PEM_BLOCK", error: "No PEM certificate block found" };
     }
 
-    forge.pki.certificateFromPem(firstCert);
+    const certBuffer = pemToArrayBuffer(firstCert);
+    // This will throw if the certificate is invalid
+    pkijs.Certificate.fromBER(certBuffer);
     return { valid: true };
   } catch (err) {
-    if (isForgeUnsupportedKeyType(err)) {
-      return {
-        valid: false,
-        code: "UNSUPPORTED_KEY_TYPE",
-        error:
-          "Unsupported certificate type (ECDSA). Please use an RSA certificate (LetsEncrypt RSA, or an RSA S/MIME signing cert).",
-      };
-    }
-
+    console.warn("Certificate validation error:", err);
     return { valid: false, code: "INVALID_PEM", error: "Invalid PEM certificate" };
   }
 }
 
 /**
- * Validates a PEM private key (RSA only; encrypted/EC keys are not supported)
+ * Validates a PEM private key (supports RSA and ECDSA; encrypted keys are not supported)
  */
 export function validatePemPrivateKey(pem: string): PemValidationResult {
   const trimmed = pem.trim();
@@ -173,28 +70,35 @@ export function validatePemPrivateKey(pem: string): PemValidationResult {
     return {
       valid: false,
       code: "ENCRYPTED_KEY",
-      error: "Encrypted private keys are not supported. Please provide an unencrypted RSA private key.",
+      error: "Encrypted private keys are not supported. Please provide an unencrypted private key.",
     };
   }
 
-  try {
-    forge.pki.privateKeyFromPem(trimmed);
-    return { valid: true };
-  } catch (err) {
-    if (isForgeUnsupportedKeyType(err)) {
-      return {
-        valid: false,
-        code: "UNSUPPORTED_KEY_TYPE",
-        error: "Unsupported private key type (ECDSA). Please use an RSA private key.",
-      };
-    }
+  // Check for valid PEM header
+  const hasValidHeader = 
+    trimmed.includes("-----BEGIN PRIVATE KEY-----") ||
+    trimmed.includes("-----BEGIN RSA PRIVATE KEY-----") ||
+    trimmed.includes("-----BEGIN EC PRIVATE KEY-----");
 
+  if (!hasValidHeader) {
+    return { valid: false, code: "NO_PEM_BLOCK", error: "No valid private key PEM block found" };
+  }
+
+  try {
+    // Try to decode the base64 content to verify it's valid
+    const keyBuffer = pemToArrayBuffer(trimmed);
+    if (keyBuffer.byteLength === 0) {
+      return { valid: false, code: "INVALID_PEM", error: "Invalid PEM private key" };
+    }
+    return { valid: true };
+  } catch {
     return { valid: false, code: "INVALID_PEM", error: "Invalid PEM private key" };
   }
 }
 
 /**
  * Extracts certificate info for display (handles fullchain - uses first cert)
+ * Supports both RSA and ECDSA certificates
  */
 export function getCertificateInfo(pem: string): {
   subject: string;
@@ -205,14 +109,36 @@ export function getCertificateInfo(pem: string): {
   try {
     const firstCert = extractFirstCertificate(pem);
     if (!firstCert) return null;
-    const cert = forge.pki.certificateFromPem(firstCert);
+    
+    const certBuffer = pemToArrayBuffer(firstCert);
+    const cert = pkijs.Certificate.fromBER(certBuffer);
+    
+    // Extract CN from subject
+    let subject = "Unknown";
+    for (const rdn of cert.subject.typesAndValues) {
+      if (rdn.type === "2.5.4.3") { // CN OID
+        subject = rdn.value.valueBlock.value;
+        break;
+      }
+    }
+    
+    // Extract CN from issuer
+    let issuer = "Unknown";
+    for (const rdn of cert.issuer.typesAndValues) {
+      if (rdn.type === "2.5.4.3") { // CN OID
+        issuer = rdn.value.valueBlock.value;
+        break;
+      }
+    }
+    
     return {
-      subject: cert.subject.getField("CN")?.value || "Unknown",
-      issuer: cert.issuer.getField("CN")?.value || "Unknown",
-      validFrom: cert.validity.notBefore,
-      validTo: cert.validity.notAfter,
+      subject,
+      issuer,
+      validFrom: cert.notBefore.value,
+      validTo: cert.notAfter.value,
     };
-  } catch {
+  } catch (err) {
+    console.warn("Failed to parse certificate info:", err);
     return null;
   }
 }
