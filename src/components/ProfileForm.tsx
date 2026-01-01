@@ -10,7 +10,12 @@ import { CodePreview } from "@/components/CodePreview";
 
 import { SigningCertificateInput, type SigningCertificates } from "@/components/SigningCertificateInput";
 import { dnsProviders, type DNSProvider } from "@/lib/dns-providers";
-import { generateMobileConfig, downloadProfile, type ProfileConfig, type CertificateConfig } from "@/lib/profile-generator";
+import {
+  generateMobileConfig,
+  downloadProfile,
+  type ProfileConfig,
+  type CertificateConfig,
+} from "@/lib/profile-generator";
 import { signMobileConfig, downloadSignedProfile } from "@/lib/profile-signer";
 import { toast } from "sonner";
 import { Sparkles, RefreshCw } from "lucide-react";
@@ -77,7 +82,7 @@ export function ProfileForm() {
       const ips = serverIps.split(",").map((ip) => ip.trim());
       const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
       const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
-      
+
       for (const ip of ips) {
         if (ip && !ipv4Regex.test(ip) && !ipv6Regex.test(ip)) {
           newErrors.serverIps = "Invalid IP address format";
@@ -138,7 +143,7 @@ export function ProfileForm() {
 
   const handleDownload = () => {
     const filename = profileName.replace(/[^a-zA-Z0-9-_]/g, "_") || "dns-profile";
-    
+
     if (signedProfile) {
       downloadSignedProfile(signedProfile, filename);
       toast.success("Signed profile downloaded");
@@ -158,7 +163,7 @@ export function ProfileForm() {
     setServerIps(dnsProviders[0].ips?.join(", ") || "");
     setEncryptedOnly(false);
     setPayloadScope("System");
-    
+
     setSigningEnabled(false);
     setSigningCerts(null);
     setGeneratedXml(null);
@@ -174,10 +179,7 @@ export function ProfileForm() {
           <Label className="text-base font-medium">DNS Provider</Label>
           <InfoTooltip content="Select a pre-configured DNS provider or choose Custom to enter your own server details." />
         </div>
-        <ProviderSelector
-          selectedProvider={selectedProvider.id}
-          onSelect={handleProviderSelect}
-        />
+        <ProviderSelector selectedProvider={selectedProvider.id} onSelect={handleProviderSelect} />
         {selectedProvider.description && selectedProvider.id !== "custom" && (
           <p className="text-sm text-muted-foreground">{selectedProvider.description}</p>
         )}
@@ -197,9 +199,7 @@ export function ProfileForm() {
             placeholder="My Encrypted DNS"
             className={errors.profileName ? "border-destructive" : ""}
           />
-          {errors.profileName && (
-            <p className="text-xs text-destructive">{errors.profileName}</p>
-          )}
+          {errors.profileName && <p className="text-xs text-destructive">{errors.profileName}</p>}
         </div>
 
         <div className="space-y-2">
@@ -227,9 +227,7 @@ export function ProfileForm() {
             placeholder="com.example.dns"
             className={errors.profileIdentifier ? "border-destructive" : ""}
           />
-          {errors.profileIdentifier && (
-            <p className="text-xs text-destructive">{errors.profileIdentifier}</p>
-          )}
+          {errors.profileIdentifier && <p className="text-xs text-destructive">{errors.profileIdentifier}</p>}
         </div>
       </div>
 
@@ -261,9 +259,7 @@ export function ProfileForm() {
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Label htmlFor="serverUrl">
-              {dnsProtocol === "HTTPS" ? "Server URL *" : "Server Hostname *"}
-            </Label>
+            <Label htmlFor="serverUrl">{dnsProtocol === "HTTPS" ? "Server URL *" : "Server Hostname *"}</Label>
             <InfoTooltip
               content={
                 dnsProtocol === "HTTPS"
@@ -276,16 +272,10 @@ export function ProfileForm() {
             id="serverUrl"
             value={serverUrl}
             onChange={(e) => setServerUrl(e.target.value)}
-            placeholder={
-              dnsProtocol === "HTTPS"
-                ? "https://dns.example.com/dns-query"
-                : "dns.example.com"
-            }
+            placeholder={dnsProtocol === "HTTPS" ? "https://dns.example.com/dns-query" : "dns.example.com"}
             className={errors.serverUrl ? "border-destructive" : ""}
           />
-          {errors.serverUrl && (
-            <p className="text-xs text-destructive">{errors.serverUrl}</p>
-          )}
+          {errors.serverUrl && <p className="text-xs text-destructive">{errors.serverUrl}</p>}
         </div>
 
         <div className="space-y-2">
@@ -300,9 +290,7 @@ export function ProfileForm() {
             placeholder="1.1.1.1, 1.0.0.1"
             className={errors.serverIps ? "border-destructive" : ""}
           />
-          {errors.serverIps && (
-            <p className="text-xs text-destructive">{errors.serverIps}</p>
-          )}
+          {errors.serverIps && <p className="text-xs text-destructive">{errors.serverIps}</p>}
         </div>
       </div>
 
@@ -346,12 +334,20 @@ export function ProfileForm() {
         </div>
 
         {/* Signing Section */}
-        <SigningCertificateInput
-          enabled={signingEnabled}
-          onEnabledChange={setSigningEnabled}
-          certificates={signingCerts}
-          onChange={setSigningCerts}
-        />
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Label className="text-base font-medium">Signing</Label>
+          </div>
+
+          <div>
+            <SigningCertificateInput
+              enabled={signingEnabled}
+              onEnabledChange={setSigningEnabled}
+              certificates={signingCerts}
+              onChange={setSigningCerts}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Action Buttons */}
