@@ -16,5 +16,5 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  base: mode === "production" ? "https://dns-profile-generator.pages.dev" : "",
+  base: "/dns-profile-generator/",
 }));
