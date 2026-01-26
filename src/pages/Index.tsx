@@ -15,7 +15,7 @@ const Index = () => {
             <span className="text-lg font-semibold">DNS Profile Generator</span>
           </Link>
           <a
-            href="https://github.com/fransallen/apple-dns"
+            href="https://github.com/fransallen/dns-profile-generator"
             target="_blank"
             rel="noopener noreferrer"
             className="flex gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
